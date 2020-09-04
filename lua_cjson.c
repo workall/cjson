@@ -42,6 +42,7 @@
 #include <limits.h>
 #include <lua.h>
 #include <lauxlib.h>
+#include <float.h>
 
 #include "strbuf.h"
 #include "fpconv.h"
@@ -592,8 +593,20 @@ static void json_append_array(lua_State *l, json_config_t *cfg, int current_dept
 static void json_append_number(lua_State *l, json_config_t *cfg,
                                strbuf_t *json, int lindex)
 {
-    double num = lua_tonumber(l, lindex);
+    double num;
     int len;
+    
+    if(lua_isinteger(l, lindex)){
+#define MAXNUMBER2STR	50
+        lua_Integer i = lua_tointeger(l, lindex);
+        strbuf_ensure_empty_length(json, MAXNUMBER2STR);
+        len = lua_integer2str(strbuf_empty_ptr(json),MAXNUMBER2STR,i);
+#undef MAXNUMBER2STR
+        strbuf_extend_length(json, len);
+        return;
+    }
+    num = lua_tonumber(l, lindex);
+
 
     if (cfg->encode_invalid_numbers == 0) {
         /* Prevent encoding invalid numbers */
@@ -1241,7 +1254,14 @@ static void json_process_value(lua_State *l, json_parse_t *json,
         lua_pushlstring(l, token->value.string, token->string_len);
         break;;
     case T_NUMBER:
-        lua_pushnumber(l, token->value.number);
+        {
+            lua_Integer i = round(token->value.number);
+            if(fabs(i-token->value.number)<DBL_EPSILON){
+                lua_pushinteger(l, i);
+            }else{
+                lua_pushnumber(l, token->value.number);
+            }        
+        }
         break;;
     case T_BOOLEAN:
         lua_pushboolean(l, token->value.boolean);
